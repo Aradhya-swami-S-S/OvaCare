@@ -31,10 +31,11 @@ app.use(cors());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Initialize Groq client
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY
-});
+// Groq client removed - using local ML models only
+// If you want to use Groq as an additional option, uncomment below:
+// const groq = new Groq({
+//     apiKey: process.env.GROQ_API_KEY
+// });
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
@@ -466,49 +467,39 @@ app.get('/api/chat/users-online', authenticateToken, (req, res) => {
 });
 
 // Available vision models (in order of preference) - Updated for current Groq models
+// Groq Vision Models - DISABLED (using local ML models instead)
+// Uncomment if you want to add Groq as an additional option
+/*
 const VISION_MODELS = [
     "llama-3.2-90b-vision-preview",
     "llama-3.2-11b-vision-preview",
     "llava-v1.5-7b-4096-preview",
-    "llama-3.2-1b-preview" // Fallback text model for basic analysis
+    "llama-3.2-1b-preview"
 ];
 
-// Cache for working model to avoid repeated checks
 let cachedWorkingModel = null;
 let lastModelCheck = 0;
-const MODEL_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const MODEL_CACHE_DURATION = 5 * 60 * 1000;
 
-// Function to get working vision model
 async function getWorkingVisionModel() {
-    // Return cached model if still valid
     if (cachedWorkingModel && (Date.now() - lastModelCheck) < MODEL_CACHE_DURATION) {
         return cachedWorkingModel;
     }
 
     for (const model of VISION_MODELS) {
         try {
-            // Test the model with a simple vision request
             const testResponse = await groq.chat.completions.create({
                 messages: [{
                     role: "user",
                     content: [
-                        {
-                            type: "text",
-                            text: "What do you see in this image?"
-                        },
-                        {
-                            type: "image_url",
-                            image_url: {
-                                url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-                            }
-                        }
+                        { type: "text", text: "What do you see in this image?" },
+                        { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" } }
                     ]
                 }],
                 model: model,
                 max_tokens: 10
             });
             
-            // If we get here, the model works
             cachedWorkingModel = model;
             lastModelCheck = Date.now();
             console.log(`Successfully using vision model: ${model}`);
@@ -519,271 +510,71 @@ async function getWorkingVisionModel() {
         }
     }
     
-    // Clear cache if no models work
     cachedWorkingModel = null;
     throw new Error('No vision models available');
 }
+*/
 
-// GROQ AI PCOS ANALYSIS
+// LOCAL ML PCOS ANALYSIS (No Groq dependency)
 app.post('/analyze-ultrasound', authenticateToken, upload.single('image'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No image file provided' });
         }
 
-        // Check if Groq API key is configured
-        if (!process.env.GROQ_API_KEY) {
-            return res.status(500).json({ error: 'Groq API key not configured' });
-        }
-
-        // Get working vision model or use text-based fallback
-        let visionModel;
-        let useTextFallback = false;
-        
-        try {
-            visionModel = await getWorkingVisionModel();
-            console.log(`Using vision model: ${visionModel}`);
-        } catch (error) {
-            console.error('No vision models available, using text-based analysis:', error);
-            useTextFallback = true;
-        }
+        console.log('Analyzing ultrasound image using local ML models...');
 
         // Convert image to base64
         const imageBase64 = req.file.buffer.toString('base64');
         const mimeType = req.file.mimetype;
 
-        // If using text fallback, provide basic validation based on filename and metadata
-        if (useTextFallback) {
-            // Basic validation without vision AI
-            const filename = req.file.originalname.toLowerCase();
-            const isLikelyUltrasound = filename.includes('ultrasound') || 
-                                     filename.includes('us') || 
-                                     filename.includes('sono') ||
-                                     filename.includes('echo') ||
-                                     mimeType.includes('dicom');
+        // Use local ML API directly (no Groq dependency)
+        try {
+            const localAnalysisResponse = await axios.post('http://localhost:5001/analyze-image', {
+                image: `data:${mimeType};base64,${imageBase64}`
+            }, {
+                timeout: 30000 // 30 second timeout
+            });
 
-            if (!isLikelyUltrasound) {
-                // Provide a more lenient validation when vision AI is unavailable
-                console.log('Vision AI unavailable - proceeding with basic validation');
-            }
-
-            // Proceed with text-based analysis
-            const textAnalysisPrompt = `
-            You are a medical AI assistant. A user has uploaded an image for PCOS analysis, but vision analysis is currently unavailable.
-            
-            Based on the filename "${req.file.originalname}" and the fact that the user is specifically requesting PCOS analysis, 
-            provide a general educational response about PCOS detection from ultrasound images.
-            
-            Respond with ONLY a JSON object in this exact format:
-            {
-                "pcosDetected": null,
-                "confidence": 0,
-                "findings": [
-                    "Vision analysis temporarily unavailable",
-                    "General PCOS information provided instead"
-                ],
-                "recommendations": [
-                    "Consult with a healthcare provider for proper ultrasound analysis",
-                    "Try uploading the image again later when vision AI is available",
-                    "Ensure the image is a clear ultrasound showing ovarian region"
-                ],
-                "disclaimer": "This is educational information only. Vision AI analysis is temporarily unavailable. Please consult a healthcare provider for proper medical diagnosis."
-            }
-            `;
-
-            try {
-                const textResponse = await groq.chat.completions.create({
-                    messages: [{ role: "user", content: textAnalysisPrompt }],
-                    model: "llama-3.1-70b-versatile", // Use text model
-                    temperature: 0.1,
-                    max_tokens: 800
-                });
-
-                let analysisResult;
-                try {
-                    analysisResult = JSON.parse(textResponse.choices[0].message.content);
-                } catch (parseError) {
-                    // Fallback response if parsing fails
-                    analysisResult = {
-                        pcosDetected: null,
-                        confidence: 0,
-                        findings: [
-                            "Vision analysis temporarily unavailable",
-                            "Unable to analyze uploaded image at this time"
-                        ],
-                        recommendations: [
-                            "Please try again later when vision AI services are restored",
-                            "Consult with a healthcare provider for proper ultrasound analysis",
-                            "Ensure your image is a clear ultrasound showing the ovarian region"
-                        ],
-                        disclaimer: "Vision AI analysis is temporarily unavailable. This response is for informational purposes only and does not constitute medical advice."
-                    };
-                }
-
+            if (localAnalysisResponse.data.success) {
+                console.log('Local ML analysis successful');
                 return res.json({
                     success: true,
-                    isUltrasound: true, // Assume true since user is specifically uploading for PCOS analysis
-                    analysis: analysisResult,
-                    timestamp: new Date().toISOString(),
-                    note: "Vision AI temporarily unavailable - general information provided"
+                    isUltrasound: localAnalysisResponse.data.isUltrasound,
+                    analysis: localAnalysisResponse.data.analysis,
+                    metrics: localAnalysisResponse.data.metrics,
+                    method: localAnalysisResponse.data.method || 'Local ML Model',
+                    timestamp: new Date().toISOString()
                 });
-
-            } catch (textError) {
-                console.error('Text analysis also failed:', textError);
-                return res.status(500).json({ 
-                    error: 'AI services temporarily unavailable',
-                    details: 'Both vision and text AI services are currently unavailable. Please try again later.'
+            } else {
+                console.error('Local ML analysis failed:', localAnalysisResponse.data.error);
+                return res.status(400).json({
+                    error: localAnalysisResponse.data.error || 'Analysis failed',
+                    details: localAnalysisResponse.data.details || 'Unknown error'
                 });
             }
+        } catch (localError) {
+            console.error('Local ML API error:', localError.message);
+            
+            // Check if it's a connection error
+            if (localError.code === 'ECONNREFUSED' || localError.code === 'ETIMEDOUT') {
+                return res.status(503).json({
+                    error: 'ML API not available',
+                    details: 'Please ensure the ML API is running on port 5001. Start it with: cd pcos-ml-api && python app.py',
+                    code: 'ML_API_OFFLINE'
+                });
+            }
+            
+            throw localError;
         }
-
-        // Vision AI validation (when available)
-        const validationPrompt = `
-        You are a medical AI assistant specialized in analyzing medical images. 
-        Please analyze this image and determine if it is an ultrasound image, specifically one that could be used for PCOS (Polycystic Ovary Syndrome) analysis.
-        
-        Respond with ONLY a JSON object in this exact format:
-        {
-            "isUltrasound": true/false,
-            "isOvarianUltrasound": true/false,
-            "reason": "Brief explanation of why this is or isn't an appropriate ultrasound image for PCOS analysis"
-        }
-        
-        The image should be:
-        1. An ultrasound image (showing the characteristic grayscale ultrasound appearance)
-        2. Showing ovarian or pelvic region
-        3. Clear enough for medical analysis
-        
-        If it's not an ultrasound image or not suitable for PCOS analysis, set both values to false.
-        `;
-
-        const validationResponse = await groq.chat.completions.create({
-            messages: [
-                {
-                    role: "user",
-                    content: [
-                        {
-                            type: "text",
-                            text: validationPrompt
-                        },
-                        {
-                            type: "image_url",
-                            image_url: {
-                                url: `data:${mimeType};base64,${imageBase64}`
-                            }
-                        }
-                    ]
-                }
-            ],
-            model: visionModel,
-            temperature: 0.1,
-            max_tokens: 500
-        });
-
-        let validationResult;
-        try {
-            validationResult = JSON.parse(validationResponse.choices[0].message.content);
-        } catch (parseError) {
-            console.error('Failed to parse validation response:', validationResponse.choices[0].message.content);
-            return res.status(500).json({ error: 'Failed to validate image format' });
-        }
-
-        // If not an ultrasound image, return error
-        if (!validationResult.isUltrasound || !validationResult.isOvarianUltrasound) {
-            return res.status(400).json({
-                error: 'Please upload an ultrasound image only',
-                details: validationResult.reason,
-                isUltrasound: false
-            });
-        }
-
-        // Proceed with PCOS analysis
-        const analysisPrompt = `
-        You are a medical AI assistant specialized in PCOS (Polycystic Ovary Syndrome) analysis from ultrasound images.
-        
-        Please analyze this ovarian ultrasound image for signs of PCOS. Look for:
-        1. Polycystic ovaries (12 or more follicles measuring 2-9mm in diameter)
-        2. Increased ovarian volume (>10ml)
-        3. Peripheral arrangement of follicles
-        4. Increased stromal echogenicity
-        5. Overall ovarian morphology
-        
-        Provide your analysis in ONLY this JSON format:
-        {
-            "pcosDetected": true/false,
-            "confidence": number (0-100),
-            "findings": [
-                "List of specific findings observed"
-            ],
-            "recommendations": [
-                "List of medical recommendations"
-            ],
-            "disclaimer": "Important medical disclaimer"
-        }
-        
-        Be thorough but conservative in your analysis. Always include appropriate medical disclaimers.
-        `;
-
-        const analysisResponse = await groq.chat.completions.create({
-            messages: [
-                {
-                    role: "user",
-                    content: [
-                        {
-                            type: "text",
-                            text: analysisPrompt
-                        },
-                        {
-                            type: "image_url",
-                            image_url: {
-                                url: `data:${mimeType};base64,${imageBase64}`
-                            }
-                        }
-                    ]
-                }
-            ],
-            model: visionModel,
-            temperature: 0.1,
-            max_tokens: 1000
-        });
-
-        let analysisResult;
-        try {
-            analysisResult = JSON.parse(analysisResponse.choices[0].message.content);
-        } catch (parseError) {
-            console.error('Failed to parse analysis response:', analysisResponse.choices[0].message.content);
-            return res.status(500).json({ error: 'Failed to analyze image' });
-        }
-
-        // Log the analysis for monitoring
-        console.log('PCOS Analysis completed for user:', req.user.email);
-
-        res.json({
-            success: true,
-            isUltrasound: true,
-            analysis: analysisResult,
-            timestamp: new Date().toISOString()
-        });
 
     } catch (error) {
-        console.error('Groq AI Analysis Error:', error);
-
-        // Check if it's a model-related error
-        if (error.message.includes('model') || error.message.includes('decommissioned')) {
-            return res.status(500).json({ 
-                error: 'AI vision service temporarily unavailable',
-                details: 'The AI model for image analysis is currently unavailable. Please try again later or contact support.',
-                code: 'MODEL_UNAVAILABLE'
-            });
-        }
-
-        if (error.message.includes('API key')) {
-            return res.status(500).json({ error: 'AI service configuration error' });
-        }
+        console.error('Ultrasound Analysis Error:', error);
 
         res.status(500).json({
             error: 'Failed to analyze image',
-            details: error.message
+            details: error.message || 'Unknown error occurred',
+            help: 'Make sure the ML API is running: cd pcos-ml-api && python app.py'
         });
     }
 });
