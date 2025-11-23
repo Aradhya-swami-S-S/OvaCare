@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, CheckCircle, AlertCircle, FileX, Loader } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 interface AnalysisResult {
@@ -28,6 +29,7 @@ const DetectionUpload: React.FC = () => {
   const [result, setResult] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string>('');
   const { token } = useAuth();
+  const navigate = useNavigate();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0] || null;
@@ -79,7 +81,21 @@ const DetectionUpload: React.FC = () => {
         }
       );
 
-      setResult(response.data);
+      console.log('API Response:', response.data);
+      
+      // Validate response structure
+      if (response.data && typeof response.data === 'object') {
+        // Ensure analysis object has required fields
+        if (response.data.analysis) {
+          const analysis = response.data.analysis;
+          if (!analysis.findings) analysis.findings = [];
+          if (!analysis.recommendations) analysis.recommendations = [];
+          if (!analysis.disclaimer) analysis.disclaimer = 'This AI analysis is for informational purposes only and should not replace professional medical diagnosis.';
+        }
+        setResult(response.data);
+      } else {
+        throw new Error('Invalid response format from server');
+      }
     } catch (err: any) {
       console.error('Upload error:', err);
       
@@ -103,8 +119,22 @@ const DetectionUpload: React.FC = () => {
     setError('');
   };
 
-  return (
-    <div className="bg-white rounded-lg shadow-md p-6 max-w-3xl mx-auto">
+  const handleViewDietRecommendations = () => {
+    // Store the PCOS detection result in localStorage for the diet page
+    if (result?.analysis) {
+      localStorage.setItem('pcosDetectionResult', JSON.stringify({
+        pcosDetected: result.analysis.pcosDetected,
+        confidence: result.analysis.confidence,
+        timestamp: new Date().toISOString(),
+        findings: result.analysis.findings
+      }));
+    }
+    navigate('/diet-plans');
+  };
+
+  try {
+    return (
+      <div className="bg-white rounded-lg shadow-md p-6 max-w-3xl mx-auto">
       <h2 className="text-2xl font-bold text-gray-900 mb-6">PCOS Detection</h2>
       
       {/* Error Display */}
@@ -205,6 +235,7 @@ const DetectionUpload: React.FC = () => {
               
               {result.analysis.pcosDetected !== null && (
                 <button
+                  onClick={handleViewDietRecommendations}
                   className={`px-4 py-2 rounded-md text-white transition-colors ${
                     result.analysis.pcosDetected 
                       ? 'bg-purple-600 hover:bg-purple-700' 
@@ -284,7 +315,7 @@ const DetectionUpload: React.FC = () => {
                     onClick={handleUpload}
                     className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors font-medium"
                   >
-                    Analyze with AI
+                    Analyze with OvaCare
                   </button>
                 </div>
               )}
@@ -307,8 +338,26 @@ const DetectionUpload: React.FC = () => {
           </div>
         </>
       )}
-    </div>
-  );
+      </div>
+    );
+  } catch (error) {
+    console.error('DetectionUpload render error:', error);
+    return (
+      <div className="bg-white rounded-lg shadow-md p-6 max-w-3xl mx-auto">
+        <div className="text-center py-8">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Display Error</h3>
+          <p className="text-gray-600 mb-4">There was an error displaying the results.</p>
+          <button
+            onClick={resetForm}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            Reset and Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 };
 
 export default DetectionUpload;

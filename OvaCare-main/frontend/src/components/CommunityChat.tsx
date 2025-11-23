@@ -24,6 +24,7 @@ const CommunityChat: React.FC<CommunityChatProps> = ({
   const [message, setMessage] = useState('');
   const [isMinimizedState, setIsMinimizedState] = useState(isMinimized);
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   
@@ -49,10 +50,16 @@ const CommunityChat: React.FC<CommunityChatProps> = ({
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() && isConnected) {
+    if (message.trim() && isConnected && !isSending) {
+      setIsSending(true);
       sendMessage(message);
       setMessage('');
       setIsTyping(false);
+      
+      // Reset sending state after a short delay
+      setTimeout(() => {
+        setIsSending(false);
+      }, 1000);
     }
   };
 
@@ -125,14 +132,27 @@ const CommunityChat: React.FC<CommunityChatProps> = ({
       {!isMinimizedState && (
         <>
           {/* Connection Status */}
-          {!isConnected && (
-            <div className="p-2 bg-yellow-50 border-b border-yellow-200">
-              <p className="text-yellow-800 text-sm flex items-center">
-                <AlertCircle className="h-4 w-4 mr-1" />
-                Connecting to chat...
-              </p>
-            </div>
-          )}
+          <div className={`p-2 border-b transition-colors ${
+            isConnected 
+              ? 'bg-green-50 border-green-200' 
+              : 'bg-yellow-50 border-yellow-200'
+          }`}>
+            <p className={`text-sm flex items-center ${
+              isConnected ? 'text-green-800' : 'text-yellow-800'
+            }`}>
+              {isConnected ? (
+                <>
+                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                  Connected - Real-time chat active
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-4 w-4 mr-1" />
+                  Connecting to chat...
+                </>
+              )}
+            </p>
+          </div>
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-3 h-64 bg-gray-50">
@@ -201,19 +221,37 @@ const CommunityChat: React.FC<CommunityChatProps> = ({
               />
               <button
                 type="submit"
-                disabled={!message.trim() || !isConnected}
+                disabled={!message.trim() || !isConnected || isSending}
                 className="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Send className="h-4 w-4" />
+                {isSending ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </button>
             </div>
             <div className="flex justify-between mt-1">
               <span className="text-xs text-gray-500">
                 Messages are anonymous
               </span>
-              <span className="text-xs text-gray-500">
-                {message.length}/500
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-gray-500">
+                  {message.length}/500
+                </span>
+                {process.env.NODE_ENV === 'development' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      console.log('Socket connected:', isConnected);
+                      console.log('Messages count:', messages.length);
+                    }}
+                    className="text-xs text-blue-500 hover:text-blue-700"
+                  >
+                    Debug
+                  </button>
+                )}
+              </div>
             </div>
           </form>
         </>

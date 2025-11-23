@@ -6,7 +6,17 @@ import base64
 import os
 
 # Import predictors
-# Priority 1: Hugging Face model trained on real PCOS data
+# Priority 1: CNN model trained on real PCOS data
+try:
+    from cnn_predictor import cnn_predictor
+    CNN_PCOS_AVAILABLE = True
+    print("✅ CNN PCOS model loaded (trained on real data)")
+except Exception as e:
+    print(f"⚠️  Warning: CNN PCOS model not available: {e}")
+    print("   Train it with: python train_simple_pcos.py")
+    CNN_PCOS_AVAILABLE = False
+
+# Priority 2: Hugging Face model trained on real PCOS data
 try:
     from huggingface_pcos_predictor import hf_predictor
     HUGGINGFACE_PCOS_AVAILABLE = True
@@ -117,7 +127,24 @@ def analyze_image():
         # Get base64 image data
         image_data = data['image']
         
-        # Method 1: Try Hugging Face PCOS Model (Primary - Trained on Real Data)
+        # Method 1: Try CNN PCOS Model (Primary - Trained on Real Data)
+        if CNN_PCOS_AVAILABLE:
+            try:
+                print("🤖 Attempting CNN PCOS model (trained on your dataset)...")
+                result = cnn_predictor.predict(image_data)
+                
+                if result['success']:
+                    print("✅ CNN PCOS model successful")
+                    return jsonify(result)
+                else:
+                    print(f"⚠️  CNN PCOS model failed: {result.get('error', 'Unknown error')}")
+                    # If it's not an ultrasound, return immediately
+                    if not result.get('isUltrasound', True):
+                        return jsonify(result), 400
+            except Exception as e:
+                print(f"❌ CNN PCOS model error: {str(e)}")
+
+        # Method 2: Try Hugging Face PCOS Model (Secondary - Trained on Real Data)
         if HUGGINGFACE_PCOS_AVAILABLE:
             try:
                 print("🤖 Attempting Hugging Face PCOS model (trained on your dataset)...")
@@ -134,7 +161,7 @@ def analyze_image():
             except Exception as e:
                 print(f"❌ Hugging Face PCOS model error: {str(e)}")
         
-        # Method 2: Try Pre-trained Detector (Secondary)
+        # Method 3: Try Pre-trained Detector (Tertiary)
         if PRETRAINED_AVAILABLE:
             try:
                 print("🎯 Attempting pre-trained PCOS detector...")

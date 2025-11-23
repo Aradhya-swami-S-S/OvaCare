@@ -41,6 +41,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const { token, user } = useAuth();
+  const [pingInterval, setPingInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (token && user) {
@@ -48,7 +49,10 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       const newSocket = io('http://localhost:5000', {
         auth: {
           token: token
-        }
+        },
+        transports: ['websocket', 'polling'],
+        timeout: 20000,
+        forceNew: true
       });
 
       newSocket.on('connect', () => {
@@ -56,10 +60,33 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         setIsConnected(true);
       });
 
-      newSocket.on('disconnect', () => {
-        console.log('Disconnected from server');
+      newSocket.on('disconnect', (reason) => {
+        console.log('Disconnected from server:', reason);
         setIsConnected(false);
       });
+
+      newSocket.on('connect_error', (error) => {
+        console.error('Connection error:', error);
+        setIsConnected(false);
+      });
+
+      newSocket.on('reconnect', (attemptNumber) => {
+        console.log('Reconnected to server after', attemptNumber, 'attempts');
+        setIsConnected(true);
+      });
+
+      newSocket.on('pong', () => {
+        console.log('Received pong from server');
+      });
+
+      // Set up ping interval for connection health check
+      const interval = setInterval(() => {
+        if (newSocket.connected) {
+          newSocket.emit('ping');
+        }
+      }, 30000); // Ping every 30 seconds
+
+      setPingInterval(interval);
 
       newSocket.on('recent_messages', (recentMessages: AnonymousMessage[]) => {
         // Ensure all messages are anonymous with proper styling info
@@ -73,6 +100,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       });
 
       newSocket.on('new_message', (message: AnonymousMessage) => {
+        console.log('Received new message:', message);
         // Ensure message is anonymous with proper styling info
         const anonymizedMessage = {
           ...message,
@@ -80,7 +108,14 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
           isAnonymous: true as const,
           isOwnMessage: message.isOwnMessage || false
         };
-        setMessages(prev => [...prev, anonymizedMessage]);
+        setMessages(prev => {
+          // Prevent duplicate messages
+          const messageExists = prev.some(msg => msg._id === anonymizedMessage._id);
+          if (messageExists) {
+            return prev;
+          }
+          return [...prev, anonymizedMessage];
+        });
       });
 
       // user_count event removed for complete anonymity
@@ -101,6 +136,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       setSocket(newSocket);
 
       return () => {
+        if (interval) {
+          clearInterval(interval);
+        }
         newSocket.close();
       };
     } else {
@@ -110,6 +148,10 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         setSocket(null);
         setIsConnected(false);
         setMessages([]);
+      }
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        setPingInterval(null);
       }
     }
   }, [token, user]);

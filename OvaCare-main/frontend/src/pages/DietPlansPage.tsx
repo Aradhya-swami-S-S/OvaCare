@@ -1,9 +1,57 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import DietPlan from '../components/DietPlan';
+import AIRecommendations from '../components/AIRecommendations';
+import { useAuth } from '../contexts/AuthContext';
+import axios from 'axios';
 
 const DietPlansPage: React.FC = () => {
+  const [pcosDetectionResult, setPcosDetectionResult] = useState<any>(null);
+  const [aiRecommendations, setAiRecommendations] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const { token } = useAuth();
+
+  useEffect(() => {
+    // Check if there's a PCOS detection result from the detection page
+    const storedResult = localStorage.getItem('pcosDetectionResult');
+    if (storedResult) {
+      const result = JSON.parse(storedResult);
+      setPcosDetectionResult(result);
+      fetchAIRecommendations(result);
+      // Clear the stored result after using it
+      localStorage.removeItem('pcosDetectionResult');
+    }
+  }, []);
+
+  const fetchAIRecommendations = async (detectionResult: any) => {
+    if (!token) return;
+    
+    setLoading(true);
+    try {
+      const response = await axios.post(
+        'http://localhost:5000/api/diet/ai-recommendations',
+        {
+          pcosDetected: detectionResult.pcosDetected,
+          confidence: detectionResult.confidence,
+          userPreferences: {}
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      setAiRecommendations(response.data.recommendations);
+    } catch (error) {
+      console.error('Failed to fetch AI recommendations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Navbar />
@@ -97,14 +145,39 @@ const DietPlansPage: React.FC = () => {
             </div>
           </div>
           
+          {/* AI Recommendations Section */}
+          {pcosDetectionResult && (
+            <div className="mb-16">
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-bold text-gray-900">AI-Powered Diet Recommendations</h2>
+                <p className="mt-2 text-gray-500">
+                  Based on your PCOS detection results (Confidence: {pcosDetectionResult.confidence}%), 
+                  we've generated personalized nutrition recommendations
+                </p>
+              </div>
+              
+              {loading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+                  <p className="mt-4 text-gray-600">Generating personalized recommendations...</p>
+                </div>
+              ) : aiRecommendations ? (
+                <AIRecommendations recommendations={aiRecommendations} pcosDetected={pcosDetectionResult.pcosDetected} />
+              ) : null}
+            </div>
+          )}
+
           <div className="mb-16">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-gray-900">Your Personalized Meal Plan</h2>
               <p className="mt-2 text-gray-500">
-                Based on your PCOS detection results, we've created a tailored nutrition plan to help manage your symptoms
+                {pcosDetectionResult 
+                  ? `Based on your PCOS detection results, we've created a tailored nutrition plan to help manage your symptoms`
+                  : 'A balanced nutrition plan for overall health and wellness'
+                }
               </p>
             </div>
-            <DietPlan type="pcos" />
+            <DietPlan type={pcosDetectionResult?.pcosDetected ? "pcos" : "normal"} />
           </div>
         </div>
       </div>

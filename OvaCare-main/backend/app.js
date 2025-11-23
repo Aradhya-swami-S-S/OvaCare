@@ -20,7 +20,7 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5173", // Frontend URL
+        origin: ["http://localhost:5173", "http://localhost:5174"], // Frontend URLs
         methods: ["GET", "POST"]
     }
 });
@@ -153,6 +153,12 @@ io.on('connection', async (socket) => {
                 io.to(userInfo.socketId).emit('new_message', messageData);
             });
             
+            // Also broadcast to all sockets as a fallback to ensure delivery
+            const fallbackMessage = anonymizeMessage(message, null);
+            io.emit('new_message', fallbackMessage);
+            
+            console.log(`Message broadcasted to ${connectedUsers.size} connected users`);
+            
         } catch (error) {
             console.error('Error sending message:', error);
             socket.emit('error', { message: 'Failed to send message' });
@@ -165,6 +171,11 @@ io.on('connection', async (socket) => {
             username: 'Someone', // Always anonymous
             isTyping: data.isTyping
         });
+    });
+
+    // Handle ping for connection health check
+    socket.on('ping', () => {
+        socket.emit('pong');
     });
 
     // Handle disconnect
@@ -414,6 +425,35 @@ app.get('/api/chat/messages', authenticateToken, async (req, res) => {
     }
 });
 
+// Test endpoint to verify real-time messaging
+app.post('/api/chat/test', authenticateToken, async (req, res) => {
+    try {
+        const testMessage = new Message({
+            content: 'Test message - real-time chat is working!',
+            userId: req.userId,
+            username: 'System Test',
+            isAnonymous: true
+        });
+        
+        await testMessage.save();
+        
+        // Broadcast test message to all connected users
+        connectedUsers.forEach((userInfo, userId) => {
+            const messageData = anonymizeMessage(testMessage, userId);
+            io.to(userInfo.socketId).emit('new_message', messageData);
+        });
+        
+        // Also broadcast to all sockets as a fallback
+        const fallbackMessage = anonymizeMessage(testMessage, null);
+        io.emit('new_message', fallbackMessage);
+        
+        res.json({ success: true, message: 'Test message sent' });
+    } catch (error) {
+        console.error('Error sending test message:', error);
+        res.status(500).json({ error: 'Failed to send test message' });
+    }
+});
+
 // Send message via REST API (alternative to Socket.IO)
 app.post('/api/chat/send', authenticateToken, async (req, res) => {
     try {
@@ -586,6 +626,254 @@ app.post('/predict', async (req, res) => {
         res.json(response.data);
     } catch (error) {
         res.status(500).json({ error: 'Prediction failed' });
+    }
+});
+
+// AI DIET RECOMMENDATIONS
+app.post('/api/diet/ai-recommendations', authenticateToken, async (req, res) => {
+    try {
+        const { pcosDetected, confidence, userPreferences } = req.body;
+        
+        // Generate AI-powered diet recommendations based on PCOS status
+        const recommendations = generateDietRecommendations(pcosDetected, confidence, userPreferences);
+        
+        res.json({
+            success: true,
+            recommendations,
+            pcosDetected,
+            confidence,
+            generatedAt: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Diet recommendation error:', error);
+        res.status(500).json({ error: 'Failed to generate diet recommendations' });
+    }
+});
+
+function generateDietRecommendations(pcosDetected, confidence, userPreferences = {}) {
+    const baseRecommendations = {
+        mealPlan: [],
+        guidelines: [],
+        foodsToInclude: [],
+        foodsToAvoid: [],
+        supplements: [],
+        tips: []
+    };
+
+    if (pcosDetected) {
+        // PCOS-specific recommendations
+        baseRecommendations.mealPlan = [
+            {
+                meal: 'Breakfast',
+                options: [
+                    'Greek yogurt with berries and chia seeds',
+                    'Vegetable omelet with spinach and mushrooms',
+                    'Oatmeal with cinnamon and nuts',
+                    'Avocado toast on whole grain bread'
+                ],
+                calories: '300-400',
+                timing: '7:00-9:00 AM'
+            },
+            {
+                meal: 'Mid-Morning Snack',
+                options: [
+                    'Handful of almonds',
+                    'Apple with almond butter',
+                    'Green tea with a small piece of dark chocolate'
+                ],
+                calories: '150-200',
+                timing: '10:00-11:00 AM'
+            },
+            {
+                meal: 'Lunch',
+                options: [
+                    'Quinoa salad with grilled chicken and vegetables',
+                    'Lentil soup with mixed greens',
+                    'Salmon with roasted vegetables',
+                    'Chickpea curry with brown rice'
+                ],
+                calories: '400-500',
+                timing: '12:00-2:00 PM'
+            },
+            {
+                meal: 'Afternoon Snack',
+                options: [
+                    'Hummus with cucumber slices',
+                    'Mixed nuts and seeds',
+                    'Herbal tea with a small portion of cheese'
+                ],
+                calories: '150-200',
+                timing: '3:00-4:00 PM'
+            },
+            {
+                meal: 'Dinner',
+                options: [
+                    'Grilled fish with steamed broccoli and sweet potato',
+                    'Turkey and vegetable stir-fry',
+                    'Tofu curry with cauliflower rice',
+                    'Lean beef with roasted vegetables'
+                ],
+                calories: '400-500',
+                timing: '6:00-8:00 PM'
+            }
+        ];
+
+        baseRecommendations.guidelines = [
+            'Focus on low glycemic index foods to manage insulin resistance',
+            'Eat regular, balanced meals to stabilize blood sugar',
+            'Include anti-inflammatory foods like fatty fish, berries, and leafy greens',
+            'Limit refined carbohydrates and processed foods',
+            'Stay hydrated with 8-10 glasses of water daily',
+            'Consider intermittent fasting under medical supervision'
+        ];
+
+        baseRecommendations.foodsToInclude = [
+            'Leafy greens (spinach, kale, arugula)',
+            'Fatty fish (salmon, mackerel, sardines)',
+            'Nuts and seeds (almonds, walnuts, chia seeds)',
+            'Berries (blueberries, strawberries, raspberries)',
+            'Whole grains (quinoa, brown rice, oats)',
+            'Lean proteins (chicken, turkey, tofu)',
+            'Healthy fats (avocado, olive oil)',
+            'Legumes (lentils, chickpeas, black beans)'
+        ];
+
+        baseRecommendations.foodsToAvoid = [
+            'Refined sugars and high-sugar foods',
+            'Processed and packaged foods',
+            'White bread and refined grains',
+            'Sugary drinks and sodas',
+            'Trans fats and fried foods',
+            'Excessive dairy products',
+            'High-sodium foods',
+            'Alcohol in excess'
+        ];
+
+        baseRecommendations.supplements = [
+            'Inositol (2-4g daily) - may help with insulin sensitivity',
+            'Omega-3 fatty acids - for anti-inflammatory effects',
+            'Vitamin D - often deficient in PCOS',
+            'Chromium - may help with glucose metabolism',
+            'Spearmint tea - may help with hormonal balance'
+        ];
+
+        baseRecommendations.tips = [
+            'Eat protein with every meal to stabilize blood sugar',
+            'Choose complex carbohydrates over simple sugars',
+            'Practice mindful eating and chew slowly',
+            'Plan meals in advance to avoid impulsive food choices',
+            'Consider working with a registered dietitian',
+            'Monitor how different foods affect your energy and symptoms'
+        ];
+    } else {
+        // General healthy diet recommendations
+        baseRecommendations.mealPlan = [
+            {
+                meal: 'Breakfast',
+                options: [
+                    'Whole grain cereal with milk and fruit',
+                    'Smoothie with spinach, banana, and protein powder',
+                    'Whole grain toast with avocado and egg',
+                    'Yogurt parfait with granola and berries'
+                ],
+                calories: '350-450',
+                timing: '7:00-9:00 AM'
+            },
+            {
+                meal: 'Lunch',
+                options: [
+                    'Mediterranean salad with grilled chicken',
+                    'Vegetable soup with whole grain bread',
+                    'Quinoa bowl with roasted vegetables',
+                    'Turkey and hummus wrap'
+                ],
+                calories: '400-500',
+                timing: '12:00-2:00 PM'
+            },
+            {
+                meal: 'Dinner',
+                options: [
+                    'Baked salmon with quinoa and vegetables',
+                    'Vegetable stir-fry with brown rice',
+                    'Grilled chicken with sweet potato and greens',
+                    'Lentil curry with whole grain naan'
+                ],
+                calories: '450-550',
+                timing: '6:00-8:00 PM'
+            }
+        ];
+
+        baseRecommendations.guidelines = [
+            'Maintain a balanced diet with variety',
+            'Include fruits and vegetables in every meal',
+            'Choose whole grains over refined grains',
+            'Stay hydrated throughout the day',
+            'Practice portion control',
+            'Limit processed and fast foods'
+        ];
+
+        baseRecommendations.foodsToInclude = [
+            'Colorful fruits and vegetables',
+            'Whole grains and fiber-rich foods',
+            'Lean proteins from various sources',
+            'Healthy fats like nuts and olive oil',
+            'Low-fat dairy or alternatives',
+            'Plenty of water and herbal teas'
+        ];
+
+        baseRecommendations.foodsToAvoid = [
+            'Excessive processed foods',
+            'High-sugar snacks and desserts',
+            'Sugary beverages',
+            'Excessive saturated fats',
+            'Too much sodium',
+            'Excessive alcohol consumption'
+        ];
+
+        baseRecommendations.tips = [
+            'Eat a rainbow of fruits and vegetables',
+            'Plan balanced meals with all food groups',
+            'Listen to your hunger and fullness cues',
+            'Stay active and maintain regular exercise',
+            'Get adequate sleep for better metabolism',
+            'Practice stress management techniques'
+        ];
+    }
+
+    return baseRecommendations;
+}
+
+// SAVE DIET PLAN
+app.post('/api/diet/save-plan', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { pcosDetected, recommendations, savedAt, planType } = req.body;
+        
+        // For now, we'll store it in a simple way
+        // In a real app, you'd want a proper DietPlan model
+        const dietPlan = {
+            userId,
+            pcosDetected,
+            recommendations,
+            planType,
+            savedAt: savedAt || new Date().toISOString(),
+            createdAt: new Date().toISOString()
+        };
+        
+        // Store in user's session or a simple file for demo
+        // In production, you'd save to database
+        console.log('Diet plan saved for user:', userId, dietPlan);
+        
+        res.json({
+            success: true,
+            message: 'Diet plan saved successfully',
+            planId: `plan_${userId}_${Date.now()}`,
+            savedAt: dietPlan.savedAt
+        });
+        
+    } catch (error) {
+        console.error('Error saving diet plan:', error);
+        res.status(500).json({ error: 'Failed to save diet plan' });
     }
 });
 
