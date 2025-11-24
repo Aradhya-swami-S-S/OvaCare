@@ -20,7 +20,9 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: ["http://localhost:5173", "http://localhost:5174"], // Frontend URLs
+        origin: process.env.NODE_ENV === 'production' 
+            ? [process.env.FRONTEND_URL || "https://ovacare-frontend.onrender.com"]
+            : ["http://localhost:5173", "http://localhost:5174"], // Frontend URLs
         methods: ["GET", "POST"]
     }
 });
@@ -54,7 +56,18 @@ const upload = multer({
     }
 });
 
-mongoose.connect("mongodb://127.0.0.1:27017/crowd-delivery");
+// MongoDB Connection
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/crowd-delivery";
+
+mongoose.connect(MONGODB_URI)
+  .then(() => {
+    console.log('✅ Connected to MongoDB Atlas successfully!');
+    console.log('Database:', MONGODB_URI.includes('mongodb.net') ? 'MongoDB Atlas (Cloud)' : 'Local MongoDB');
+  })
+  .catch((error) => {
+    console.error('❌ MongoDB connection error:', error);
+    process.exit(1);
+  });
 
 // Socket.IO Authentication Middleware
 const authenticateSocket = (socket, next) => {
@@ -570,7 +583,8 @@ app.post('/analyze-ultrasound', authenticateToken, upload.single('image'), async
 
         // Use local ML API directly (no Groq dependency)
         try {
-            const localAnalysisResponse = await axios.post('http://localhost:5001/analyze-image', {
+            const ML_API_URL = process.env.ML_API_URL || 'http://localhost:5001';
+            const localAnalysisResponse = await axios.post(`${ML_API_URL}/analyze-image`, {
                 image: `data:${mimeType};base64,${imageBase64}`
             }, {
                 timeout: 30000 // 30 second timeout
@@ -622,7 +636,8 @@ app.post('/analyze-ultrasound', authenticateToken, upload.single('image'), async
 // PREDICT (PCOS Risk)
 app.post('/predict', async (req, res) => {
     try {
-        const response = await axios.post('http://localhost:5001/predict', req.body);
+        const ML_API_URL = process.env.ML_API_URL || 'http://localhost:5001';
+        const response = await axios.post(`${ML_API_URL}/predict`, req.body);
         res.json(response.data);
     } catch (error) {
         res.status(500).json({ error: 'Prediction failed' });
@@ -1415,7 +1430,7 @@ app.post('/api/diet/seed', authenticateToken, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Socket.IO server ready for connections`);
 });

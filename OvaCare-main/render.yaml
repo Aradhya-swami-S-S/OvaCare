@@ -1,0 +1,46 @@
+services:
+  # Frontend (React/Vite)
+  - type: web
+    name: ovacare-frontend
+    env: static
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  # Backend (Node.js/Express)
+  - type: web
+    name: ovacare-backend
+    env: node
+    buildCommand: cd backend && npm ci
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MONGODB_URI
+        fromDatabase:
+          name: ovacare-db
+          property: connectionString
+
+  # ML API (Python/Flask)
+  - type: web
+    name: ovacare-ml-api
+    env: python
+    buildCommand: cd pcos-ml-api && pip install -r requirements.txt
+    startCommand: cd pcos-ml-api && python app.py
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PORT
+        value: 5001
+
+databases:
+  - name: ovacare-db
+    databaseName: ovacare
+    user: ovacare_user
