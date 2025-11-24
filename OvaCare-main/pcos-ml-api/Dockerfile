@@ -1,23 +1,26 @@
 # OvaCare-main/pcos-ml-api/Dockerfile
 FROM python:3.11-slim
 
-# Install minimal build deps (kept small). Many packages come as wheels on 3.11 so compile isn't needed.
+# Small system deps for building wheels if absolutely required
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    gcc \
+    g++ \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Upgrade pip & tools so wheels are chosen
+# Upgrade pip and related tools so pip selects wheels
 RUN python -m pip install --upgrade pip setuptools wheel
 
-# Copy only requirements first for caching
+# Copy only requirements first to leverage Docker cache
 COPY requirements.txt .
 
 # Install dependencies (prefer wheels)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the source
+# Copy rest of the source
 COPY . .
 
 ENV PORT=5001
