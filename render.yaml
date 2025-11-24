@@ -3,7 +3,6 @@ services:
   - type: web
     name: ovacare-frontend
     env: static
-    plan: free
     buildCommand: cd OvaCare-main/frontend && npm ci && npm run build
     staticPublishPath: OvaCare-main/frontend/dist
     routes:
@@ -25,11 +24,10 @@ services:
         value: 10000
       - key: JWT_SECRET
         generateValue: true
-      # MONGODB_URI should point to an external DB (see instructions below).
       - key: MONGODB_URI
-        value: ""
+        value: ""   # Add your MongoDB Atlas free URI here AFTER deployment
 
-  # ML API (Python/Flask) - free web service (lightweight)
+  # ML API (Python/Flask) - free web service
   - type: web
     name: ovacare-ml-api
     env: python
