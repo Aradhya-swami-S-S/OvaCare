@@ -27,7 +27,7 @@ services:
       - key: MONGODB_URI
         value: ""   # Add your MongoDB Atlas free URI here AFTER deployment
 
-   # ML API (Python/Flask) - Docker (uses Python 3.11)
+  # ML API (Python/Flask) - Docker (uses Python 3.11)
   - type: web
     name: ovacare-ml-api
     env: docker

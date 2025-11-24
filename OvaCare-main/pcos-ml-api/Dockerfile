@@ -17,8 +17,8 @@ RUN python -m pip install --upgrade pip setuptools wheel
 # Copy only requirements first to leverage Docker cache
 COPY requirements.txt .
 
-# Install dependencies (prefer wheels)
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies (prefer binary wheels)
+RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 # Copy rest of the source
 COPY . .
