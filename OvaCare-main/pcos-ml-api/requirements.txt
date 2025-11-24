@@ -1,10 +1,25 @@
-
 flask==3.0.0
 flask-cors==4.0.0
-scikit-learn==1.5.0
+
+# ML stack - pin scikit-learn to match your saved models, include scipy
+scikit-learn==1.6.0
+scipy==1.11.3
+
+# data libs
 pandas==2.2.3
 numpy==1.26.4
+
+# image / CV
 opencv-python==4.10.0.84
 Pillow==10.4.0
+
+# deep learning
 tensorflow>=2.16.0
 keras>=3.0.0
+
+# production server
+gunicorn
+
+# Optional (only add if you need HuggingFace/CV transformer models):
+# transformers>=4.0.0
+# torch      # recommend pinning a CPU wheel for faster installs if needed
