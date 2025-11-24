@@ -27,12 +27,13 @@ services:
       - key: MONGODB_URI
         value: ""   # Add your MongoDB Atlas free URI here AFTER deployment
 
-  # ML API (Python/Flask) - free web service
+  # ML API (Python/Flask) - free web service (use Python 3.11 runtime)
   - type: web
     name: ovacare-ml-api
     env: python
     plan: free
-    buildCommand: cd OvaCare-main/pcos-ml-api && pip install -r requirements.txt
+    # Upgrade pip/setuptools/wheel first so binary wheels (pandas, numpy) are chosen instead of compiling from source.
+    buildCommand: cd OvaCare-main/pcos-ml-api && python -m pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
     startCommand: cd OvaCare-main/pcos-ml-api && python app.py
     envVars:
       - key: FLASK_ENV
